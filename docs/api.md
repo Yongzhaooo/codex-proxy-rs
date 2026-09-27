@@ -1138,6 +1138,12 @@ HTTP 请求头及新建 WS 的握手提示按当时的最终出站档位构造�
 WebSocket 使用对应错误事件。等待期间不发送上游请求，取消后释放等待位置，排队重查不重复计入 RPM。
 SSE 在取得有效执行前不发送保活帧，因此此阶段保留 HTTP 错误状态；已开始交付的失败沿用流内错误合同。
 
+部署配置 `openai.guardian_reserved_concurrency`（默认 0）为 Codex Guardian 自动审批保留账号并发。
+Guardian 以 `subagent_kind` 或 `client_metadata.x-openai-subagent` 值 `guardian` 识别。取值 R 大于 0 时，
+有限上限为 L 的账号对其他 OpenAI 请求只开放 `max(L − R, 1)` 个名额，Guardian 可用满 L；
+开启账号排队后，Guardian 排在同账号已有 Guardian 之后、全部普通等待者之前，不受单账号排队上限约束，
+仍受总等待容量与等待时限约束。不限并发的账号和关闭排队时的其余行为不变。
+
 任一已结算金额达到限额后拒绝新请求，已准入请求可完成并使金额超过阈值。
 HTTP 返回 `429`，`error.code` 为 `key_daily_budget_exceeded` 或 `key_weekly_budget_exceeded`，
 并附 `Retry-After`；WebSocket 每次 `response.create` 执行相同检查并返回协议错误事件。

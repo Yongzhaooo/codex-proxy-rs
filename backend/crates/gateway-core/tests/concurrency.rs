@@ -3,7 +3,7 @@ use std::time::{Duration, Instant, SystemTime};
 use futures::{FutureExt, executor::block_on};
 use gateway_core::concurrency::{
     CapacityWait, ConcurrencyQueuePolicy, ConcurrencyWaitBudget, ConcurrencyWaitQueue,
-    QueueRejection,
+    QueueRejection, WaitPriority,
 };
 
 #[test]
@@ -229,5 +229,67 @@ fn changed_scores_keep_existing_position_until_account_becomes_ineligible() {
         assert!(queue.has_waiters(&"b"));
         drop(waiting);
         assert!(!queue.has_waiters(&"b"));
+    });
+}
+
+#[test]
+fn high_priority_waiters_go_ahead_of_normal_waiters_and_keep_fifo_among_themselves() {
+    block_on(async {
+        let queue = ConcurrencyWaitQueue::default();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let policy = ConcurrencyQueuePolicy {
+            max_waiting: 2,
+            timeout: Duration::from_secs(2),
+        };
+        let request_deadline = SystemTime::now() + Duration::from_secs(2);
+        let first_normal = queue.enqueue(&["a"], 2, deadline).unwrap();
+        let second_normal = queue.enqueue(&["a"], 2, deadline).unwrap();
+
+        let normal_budget = ConcurrencyWaitBudget::default();
+        let normal = CapacityWait::new(&queue, policy, request_deadline, &normal_budget);
+        let first_budget = ConcurrencyWaitBudget::default();
+        let mut first_high = CapacityWait::new(&queue, policy, request_deadline, &first_budget)
+            .with_priority(WaitPriority::High);
+        // 只有普通等待者时，高优先级请求可以直接尝试租约，普通请求仍须排队。
+        assert!(first_high.can_try(&"a"));
+        assert!(!normal.can_try(&"a"));
+
+        // 普通等待者已占满单队列上限，高优先级仍可入队并直接成为队首。
+        first_high.wait(&["a"]).await.unwrap();
+        let second_budget = ConcurrencyWaitBudget::default();
+        let mut second_high = CapacityWait::new(&queue, policy, request_deadline, &second_budget)
+            .with_priority(WaitPriority::High);
+        assert!(!second_high.can_try(&"a"));
+        assert!(second_high.wait(&["a"]).now_or_never().is_none());
+        assert!(first_normal.turn().now_or_never().is_none());
+
+        drop(first_high);
+        second_high.wait(&["a"]).await.unwrap();
+        assert!(first_normal.turn().now_or_never().is_none());
+        drop(second_high);
+        first_normal.turn().await.unwrap();
+        drop(first_normal);
+        second_normal.turn().await.unwrap();
+    });
+}
+
+#[test]
+fn high_priority_waiters_still_require_queueing_to_be_enabled() {
+    block_on(async {
+        let queue = ConcurrencyWaitQueue::<&str>::default();
+        let policy = ConcurrencyQueuePolicy {
+            max_waiting: 0,
+            timeout: Duration::from_secs(2),
+        };
+        let budget = ConcurrencyWaitBudget::default();
+        let mut waiting = CapacityWait::new(
+            &queue,
+            policy,
+            SystemTime::now() + Duration::from_secs(2),
+            &budget,
+        )
+        .with_priority(WaitPriority::High);
+        assert_eq!(waiting.wait(&["a"]).await, Err(QueueRejection::Full));
+        assert!(!queue.has_waiters(&"a"));
     });
 }

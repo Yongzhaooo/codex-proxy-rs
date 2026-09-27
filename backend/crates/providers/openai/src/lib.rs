@@ -155,16 +155,19 @@ pub async fn initialize(
         http.clone(),
         config.base_url().to_owned(),
     ));
-    let selector = Arc::new(CodexCredentialSelector::new(
-        provider_kind.clone(),
-        repository.clone(),
-        Arc::clone(&leases),
-        session_affinity,
-        session_exclusions,
-        Arc::clone(&quota),
-        Arc::clone(&account_feedback),
-        CodexCookiePolicy::official().map_err(|_| OpenAiInitializeError::CookiePolicy)?,
-    ));
+    let selector = Arc::new(
+        CodexCredentialSelector::new(
+            provider_kind.clone(),
+            repository.clone(),
+            Arc::clone(&leases),
+            session_affinity,
+            session_exclusions,
+            Arc::clone(&quota),
+            Arc::clone(&account_feedback),
+            CodexCookiePolicy::official().map_err(|_| OpenAiInitializeError::CookiePolicy)?,
+        )
+        .with_guardian_reserved_concurrency(config.guardian_reserved_concurrency),
+    );
     let core_provider: Arc<dyn Provider> = Arc::new(
         CodexProvider::new(
             selector,

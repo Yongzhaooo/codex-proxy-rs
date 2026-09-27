@@ -476,8 +476,8 @@ impl Provider for CodexProvider {
         let preselection = (generate.protocol_payload().protocol() == PROVIDER_NAME)
             .then(|| self.prepare_generate_request(generate, upstream_model, &context))
             .transpose()?;
-        let (selection_session_affinity, selection_cyber_policy_key, requires_websocket) =
-            preselection.map_or((None, None, false), |prepared| {
+        let (selection_session_affinity, selection_cyber_policy_key, requires_websocket, guardian) =
+            preselection.map_or((None, None, false, false), |prepared| {
                 let requires_websocket =
                     transport_requirement(&prepared.upstream).requires_websocket()
                         || (context.continuation_attempt() == ContinuationAttempt::Native
@@ -490,6 +490,7 @@ impl Provider for CodexProvider {
                     prepared.session_affinity,
                     prepared.cyber_policy_session_key,
                     requires_websocket,
+                    prepared.upstream.is_guardian(),
                 )
             });
         let selection_started_at = Instant::now();
@@ -507,6 +508,7 @@ impl Provider for CodexProvider {
                     selection_cyber_policy_key.as_ref(),
                     selection_session_affinity.as_ref(),
                     requires_websocket,
+                    guardian,
                 )
                 .await
                 .map_err(map_selection_error)

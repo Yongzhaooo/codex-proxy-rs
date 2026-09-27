@@ -432,6 +432,18 @@ pub struct AccountSelectionContext {
     pub round_robin_cursor: u64,
     pub eligibility: AccountEligibilityPolicy,
     pub account_scope: Option<std::sync::Arc<crate::account::scope::FrozenAccountScope>>,
+    /// 本请求不可占用的每账号预留并发名额，由 Provider 按请求类别决定；0 表示不预留。
+    pub reserved_concurrency: u32,
+}
+
+impl AccountSelectionContext {
+    /// 本请求在该账号上可使用的并发上限；资格判断、租约与策略投影必须共用这一口径。
+    #[must_use]
+    pub fn concurrency_limit(&self, account: &ProviderAccount) -> AccountConcurrency {
+        account
+            .effective_concurrency(self.policy.max_concurrent_per_account())
+            .excluding_reserved(self.reserved_concurrency)
+    }
 }
 
 /// 选择账号时是否执行本地调度资格投影。
@@ -788,9 +800,8 @@ impl AccountSelector {
         if context.excluded_accounts.contains(candidate.account.id()) {
             return Some(AccountSchedulingBlocker::Excluded);
         }
-        if candidate
-            .account
-            .effective_concurrency(context.policy.max_concurrent_per_account())
+        if context
+            .concurrency_limit(&candidate.account)
             .limit()
             .is_some_and(|limit| candidate.signals.in_flight >= limit.get())
         {

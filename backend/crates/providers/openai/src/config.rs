@@ -41,6 +41,9 @@ pub struct OpenAiConfig {
     pub stream_max_retries: u64,
     #[serde(default)]
     pub residency: Option<CodexResidency>,
+    /// 每个有限并发账号为 Codex Guardian 自动审批保留的名额；普通请求不可占用，0 表示不预留。
+    #[serde(default)]
+    pub guardian_reserved_concurrency: u32,
     #[serde(skip)]
     identity_secret_path: PathBuf,
 }
@@ -115,6 +118,7 @@ impl Default for OpenAiConfig {
             auth: CodexAuthSettings::default(),
             stream_max_retries: DEFAULT_STREAM_MAX_RETRIES,
             residency: None,
+            guardian_reserved_concurrency: 0,
             identity_secret_path: PathBuf::new(),
         }
     }
