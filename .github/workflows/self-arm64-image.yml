@@ -1,0 +1,47 @@
+# Self-hosted deployment build only; this branch is never proposed upstream.
+name: self-arm64-image
+
+on:
+  push:
+    branches:
+      - 'self-build/**'
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: meta
+        run: |
+          # HEAD only adds this workflow; the image is built from the feature commit below it.
+          echo "source_sha=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short=8 HEAD^)" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build linux/arm64 image
+        run: |
+          git checkout --detach "${{ steps.meta.outputs.source_sha }}"
+          docker buildx build \
+            --platform linux/arm64 \
+            --file deploy/Dockerfile \
+            --target runtime \
+            --build-arg CPR_GIT_SHA="${{ steps.meta.outputs.source_sha }}" \
+            --build-arg CPR_BUILD_TIME="${{ steps.meta.outputs.build_time }}" \
+            --tag "codex-proxy-rs-local:3.18.2-guardian.${{ steps.meta.outputs.short_sha }}" \
+            --output type=docker,dest=image.tar \
+            .
+          gzip -1 image.tar
+          sha256sum image.tar.gz | tee image.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpr-arm64-${{ steps.meta.outputs.short_sha }}
+          path: |
+            image.tar.gz
+            image.tar.gz.sha256
+          retention-days: 7
