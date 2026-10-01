@@ -29,6 +29,7 @@ interface SystemUpdateEvent {
   level: string
   message: string
   at: string
+  atDisplay: string
   step?: string
   terminal?: boolean
 }
@@ -60,7 +61,6 @@ export const useSystemUpdateStore = defineStore('system-update', () => {
   const updateError = shallowRef('')
   const statusAvailable = shallowRef(false)
   const policy = shallowRef<SystemUpdatePolicy | null>(null)
-  const loadedOnce = shallowRef(false)
   const updateLogs = ref<SystemUpdateEvent[]>([])
   const updateStreaming = shallowRef(false)
   const updateStreamError = shallowRef('')
@@ -282,7 +282,6 @@ export const useSystemUpdateStore = defineStore('system-update', () => {
       return
     updateInfo.value = detail
     policy.value = detail.policy
-    loadedOnce.value = true
     if (!version.value)
       await loadVersion()
     if (generation !== detailGeneration)
@@ -501,7 +500,6 @@ export const useSystemUpdateStore = defineStore('system-update', () => {
     updateError,
     lastFailedOperation,
     needRestart,
-    loadedOnce,
     updateLogs,
     updateStreaming,
     updateStreamError,

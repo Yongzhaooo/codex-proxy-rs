@@ -89,6 +89,12 @@ UI 包只公开组件、主题与样式入口；Pinia 持久化、登录、路�
 插件页面把所需 UI、Vue 和 Tailwind CSS 4 样式编译进包内静态资源，通过隔离页面与受限消息桥使用自己的管理接口，
 不在运行时借用宿主 Vue 实例或内部模块。组件与主题扩展方式见 [管理端主题](theme.md)
 
+部署时区由 Host 配置拥有，组合根把不可变的 `DeploymentTimeZone` 传给各模块。
+Core 的 `time` 只提供时区与日历边界换算；Admin/Provider 拥有查询范围与调度规则，Store 绑定显式 UTC 边界并维护事务。
+API 的时间 presenter 负责页面及事件展示文本，前端消费投影，不解释时区或格式化日期。
+持久化、协议传输、排序与 TTL 使用 UTC 时间点或持续时长，不依赖进程、浏览器及数据库会话的本地时区。
+请求位置中的时区属于 Provider 请求身份，与部署日历规则独立。配置操作见[部署时区](../deploy/README.md#部署时区)
+
 ### 3.1 插件扩展
 
 `gateway-plugin/` 只是目录分组，包含独立 SDK 和宿主 Runtime，不存在聚合 crate。
@@ -572,13 +578,16 @@ Guardian 自动审批的账号容量预留与优先排队是固定的调度合�
 日金额、七天金额、并发和 RPM 按 Client Key 跨账号、跨 Provider 合计，零表示不限；修改限额不重置已用金额。
 Core 负责准入与结算时序，Store 持久化费用账本，Admin 负责限额配置。
 Admin 的手动重置复用同一账本与 Key 行锁，在一个事务中清零所选周期金额、推进计费起点并写入审计，
-保留窗口到期时间与费用事件，不推进配置 revision。结算仍按完成时间判断归属，重置前完成的费用不会重新扣入已重置周期。
+关闭所选窗口并保留费用事件，不推进配置 revision，下次使用时重新开启窗口。
+结算仍按完成时间判断归属，重置前完成的费用不会重新扣入已重置周期或开启窗口。
 插件预算回调通过 `PluginClientKeyAccess` 进入同一 `ClientKeyService` 和 `ClientKeyStore`，存储事务先复核插件实例版本，
 再执行原生预算操作；不建立另一份预算状态。查询复用账本投影，不触发准入。局部更新金额上限不改用量或窗口，
 仅在值变化时提交配置 revision、审计并发布；重置仍不推进配置版本。重复调用及结果未知的合同见
-[SDK 预算接口](../backend/crates/gateway-plugin/sdk/docs/capabilities.md#client-key-预算)
+[SDK 预算接口](../backend/crates/gateway-plugin/sdk/docs/capabilities.md#client-key-预算)。插件的外部周期和截止时间属于插件私有状态，展示在插件页面；
+宿主预算接口和管理页面只表达原生窗口事实，不为插件周期修改滚动规则或重置语义
 
-- 日窗口按北京时间零点划分；七天窗口从首次准入当天零点开始，到期后由下一次使用重新开启，不固定为周一
+- 日窗口按部署时区自然日划分；七天窗口从首次准入当天日界开始，按七个本地日历日续期，不固定为周一。
+  已打开窗口不随时区切换清零或改写 UTC 边界，续接起点不得早于旧终点与人工重置边界
 - 金额优先使用 Provider 上报的 USD，否则按现有模型价格估算；订阅账号的估算费用不代表上游订阅账单。
   费用归属请求完成时间，跨日请求计入完成日，延迟写入仍保留原完成时间
 - 准入检查已结算金额，不预占未来费用。达到任一金额阈值后拒绝新请求，已准入请求仍可完成并使总额超过阈值
@@ -760,7 +769,12 @@ Worker 由各 Bundle 贡献、由 Host 统一监督：
 - Core：`runtime` owner 的 RuntimeSnapshot 周期对账和 Redis change 订阅
 - Admin：S3/R2 备份 daemon，负责调度、执行、删除收敛与保留清理；
   以及账号冻结恢复 worker（容量熔断的自适应并发下调与到期探测解冻）
-- Provider：credential refresh、quota/catalog 健康和官方版本/etag 检查
+- Provider：credential refresh、quota/catalog 健康、账号预热和官方版本/etag 检查
+
+预热与备份按部署时区解释本地时刻，缺失时刻跳过、重复时刻取较早一次。
+预热由 Store 持久领取本地分钟，防止多个时间槽、回拨或重启丢失去重状态；取消仍沿既有 worker lease 生命周期释放。
+备份设置中的时区仅记录游标来源，切换后从当前时刻重算未来游标，不补跑旧计划。
+游标重算核对启停、Cron、来源时区及旧游标；任务入队与游标推进同事务提交，冲突时只跳过任务
 
 账号容量熔断默认关闭。启用后，仅普通请求收到的明确容量拒绝（`server_is_overloaded`、`slow_down`
 或结构化错误中的明确过载提示）按滑动窗口计数，并把当时观测到的在途并发并入峰值证据；
@@ -864,7 +878,8 @@ RUST_MIN_STACK=16777216 cargo +1.97.0 test --manifest-path backend/Cargo.toml --
 其他检查与界面验证按 [贡献与审查](../CONTRIBUTING.md#验证) 执行
 
 插件 Runtime 的真实子进程与持久化测试使用 `CPR_PLUGIN_TEST_DATABASE_URL` 和
-`CPR_PLUGIN_TEST_REDIS_URL` 指向专用实例，密码及隔离要求与上述 Store 测试一致。
+`CPR_PLUGIN_TEST_REDIS_URL` 指向专用实例；未提供插件专用变量时复用 `CPR_TEST_DATABASE_URL` 与 `CPR_TEST_REDIS_URL`。
+密码及隔离要求与上述 Store 测试一致，CI 缺少服务配置时直接失败。
 设置 `CPR_PLUGIN_TEST_LIVE_HTTP=1` 会额外请求 GitHub 公共 HTTPS API，验证受管出站链路；这不代表模型推理验收。
 若测试环境使用 Fake-IP 或私网 DNS，需通过 `CPR_PLUGIN_TEST_LIVE_NETWORK_RANGES` 显式提供逗号分隔的
 CIDR 授权。该选项只用于真实网络测试，默认为空，不改变生产网络策略或其他测试的授权
