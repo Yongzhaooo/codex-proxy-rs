@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BaseCard, BaseForm, BaseFormItem, BaseInput, BasePopover } from '@codex-proxy/ui'
 
-import { CircleHelp, Gauge, Timer } from '@lucide/vue'
+import { CircleAlert, Gauge, Timer } from '@lucide/vue'
 
 const maxConcurrentPerAccount = defineModel<string>('maxConcurrentPerAccount', { required: true })
 const requestIntervalMs = defineModel<string>('requestIntervalMs', { required: true })
@@ -58,12 +58,12 @@ const openaiGuardianReservedConcurrency = defineModel<string>('openaiGuardianRes
       <BaseFormItem label="排队超时（秒）" description="密钥队列与账号队列共用的等待时限，从首次入队起计时，1～120 秒">
         <BaseInput v-model="concurrencyWaitTimeoutSeconds" aria-label="排队超时（秒）" type="number" min="1" max="120" step="1" />
       </BaseFormItem>
-      <BaseFormItem label="Guardian 预留并发" description="为 Codex 自动审批预留每账号名额，0 表示关闭">
-        <template #extra>
+      <BaseFormItem label="自动审批预留并发" description="为 Codex 自动审批预留每账号名额，0 表示关闭">
+        <template #label-extra>
           <BasePopover trigger="hover-click" placement="top-start">
             <template #trigger="{ open }">
-              <button type="button" aria-label="Guardian 预留并发说明" :aria-expanded="open" class="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-cp-sm border-0 bg-transparent p-0 text-cp-text-tertiary outline-none transition-colors hover:text-cp-text focus-visible:ring-2 focus-visible:ring-cp-control-outline motion-reduce:transition-none">
-                <CircleHelp class="size-3.5" aria-hidden="true" />
+              <button type="button" aria-label="自动审批预留并发说明" :aria-expanded="open" class="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-cp-sm border-0 bg-transparent p-0 text-cp-text-tertiary outline-none transition-colors hover:text-cp-text focus-visible:ring-2 focus-visible:ring-cp-control-outline motion-reduce:transition-none">
+                <CircleAlert class="size-3.5" aria-hidden="true" />
               </button>
             </template>
             <div class="max-w-72 space-y-2 px-3 py-2 text-cp-sm leading-relaxed text-cp-text-secondary">
@@ -72,7 +72,7 @@ const openaiGuardianReservedConcurrency = defineModel<string>('openaiGuardianRes
             </div>
           </BasePopover>
         </template>
-        <BaseInput v-model="openaiGuardianReservedConcurrency" aria-label="Guardian 预留并发" type="number" min="0" max="4294967295" step="1" />
+        <BaseInput v-model="openaiGuardianReservedConcurrency" aria-label="自动审批预留并发" type="number" min="0" max="4294967295" step="1" />
       </BaseFormItem>
     </BaseForm>
   </BaseCard>
