@@ -60,7 +60,7 @@ const openaiGuardianReservedConcurrency = defineModel<string>('openaiGuardianRes
       </BaseFormItem>
       <BaseFormItem label="自动审批预留并发" description="为 Codex 自动审批预留每账号名额，0 表示关闭">
         <template #label-extra>
-          <BasePopover trigger="hover-click" placement="top-start">
+          <BasePopover class="-my-1" trigger="hover-click" placement="top-start">
             <template #trigger="{ open }">
               <button type="button" aria-label="自动审批预留并发说明" :aria-expanded="open" class="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-cp-sm border-0 bg-transparent p-0 text-cp-text-tertiary outline-none transition-colors hover:text-cp-text focus-visible:ring-2 focus-visible:ring-cp-control-outline motion-reduce:transition-none">
                 <CircleAlert class="size-3.5" aria-hidden="true" />

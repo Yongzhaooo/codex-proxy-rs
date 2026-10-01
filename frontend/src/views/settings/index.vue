@@ -144,6 +144,13 @@ watch(section, (value) => {
 
       <fieldset v-show="section !== 'access'" :disabled="disabled" class="m-0 grid min-w-0 gap-5 border-0 p-0" aria-label="基础设置">
         <template v-if="section === 'runtime'">
+          <RotationStrategyCard
+            v-model="form.rotationStrategy"
+            v-model:smart-scheduling="form.smartScheduling"
+            :smart-defaults="smartSchedulingDefaults"
+            :disabled="disabled"
+            :options="rotationOptions"
+          />
           <ConcurrencyPolicyCard
             v-model:max-concurrent-per-account="maxConcurrentPerAccountValue"
             v-model:request-interval-ms="requestIntervalMsValue"
@@ -151,13 +158,6 @@ watch(section, (value) => {
             v-model:max-waiting-per-account="maxWaitingPerAccountValue"
             v-model:concurrency-wait-timeout-seconds="concurrencyWaitTimeoutSecondsValue"
             v-model:openai-guardian-reserved-concurrency="openaiGuardianReservedConcurrencyValue"
-          />
-          <RotationStrategyCard
-            v-model="form.rotationStrategy"
-            v-model:smart-scheduling="form.smartScheduling"
-            :smart-defaults="smartSchedulingDefaults"
-            :disabled="disabled"
-            :options="rotationOptions"
           />
           <AccountAutoFreezeCard
             v-model:enabled="form.accountAutoFreezeEnabled"
