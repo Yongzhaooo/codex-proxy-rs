@@ -75,9 +75,6 @@ api:
 openai:
   # 数据驻留约束；省略或 null 不指定地域约束，与管理端客户端身份无关。
   residency: us
-  # 每个有限并发账号为 Codex Guardian 自动审批保留的名额；普通请求不可占用。
-  # 大于 0 时 Guardian 还会在账号队列中排在普通请求之前；0 表示不区分请求类型。
-  guardian_reserved_concurrency: 0
 
 # Compose 凭据桥接区；密码仍只维护在 store 中。
 services:

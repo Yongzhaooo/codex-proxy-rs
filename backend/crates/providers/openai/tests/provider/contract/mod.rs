@@ -1099,32 +1099,10 @@ fn provider_and_quota_with_affinity_and_base_url_and_leases(
         stream_max_retries,
         Arc::new(MemoryCooldownPort::new()),
         crate::support::runtime_policy(),
-        0,
     );
     (provider, quota)
 }
 
-fn provider_with_guardian_reserve(
-    store: &Arc<MemoryAccountStore>,
-    base_url: String,
-    leases: Arc<TestLeaseCoordinator>,
-    guardian_reserved_concurrency: u32,
-) -> Arc<CodexProvider> {
-    provider_and_quota_with_runtime_ports(
-        store,
-        Arc::new(MemorySessionAffinity::default()),
-        base_url,
-        leases,
-        u32::try_from(DEFAULT_STREAM_MAX_RETRIES).expect("default retry budget fits u32"),
-        Arc::new(MemoryCooldownPort::new()),
-        crate::support::runtime_policy(),
-        guardian_reserved_concurrency,
-    )
-    .0
-}
-
-// 测试装配显式列出每个运行端口，便于各用例替换其中一项。
-#[expect(clippy::too_many_arguments)]
 fn provider_and_quota_with_runtime_ports(
     store: &Arc<MemoryAccountStore>,
     session_affinity: Arc<MemorySessionAffinity>,
@@ -1133,7 +1111,6 @@ fn provider_and_quota_with_runtime_ports(
     stream_max_retries: u32,
     cooldowns: Arc<MemoryCooldownPort>,
     policy: Arc<dyn gateway_core::provider_ports::ProviderRuntimePolicyPort>,
-    guardian_reserved_concurrency: u32,
 ) -> (
     Arc<CodexProvider>,
     Arc<CodexCredentialQuotaService>,
@@ -1162,19 +1139,16 @@ fn provider_and_quota_with_runtime_ports(
         policy,
     ));
     let account_feedback = Arc::new(AccountFeedbackStats::default());
-    let selector = Arc::new(
-        CodexCredentialSelector::new(
-            ProviderKind::new("openai").expect("provider"),
-            store.repository(),
-            leases,
-            session_affinity,
-            Arc::new(MemorySessionExclusions::default()),
-            Arc::clone(&quota),
-            Arc::clone(&account_feedback),
-            CodexCookiePolicy::official().expect("cookie policy"),
-        )
-        .with_guardian_reserved_concurrency(guardian_reserved_concurrency),
-    );
+    let selector = Arc::new(CodexCredentialSelector::new(
+        ProviderKind::new("openai").expect("provider"),
+        store.repository(),
+        leases,
+        session_affinity,
+        Arc::new(MemorySessionExclusions::default()),
+        Arc::clone(&quota),
+        Arc::clone(&account_feedback),
+        CodexCookiePolicy::official().expect("cookie policy"),
+    ));
 
     let provider = CodexProvider::new(
         selector,
@@ -8127,7 +8101,6 @@ fn provider_with_capacity_tracking(
             )
             .expect("freeze policy"),
         ),
-        0,
     );
     (provider, pool)
 }

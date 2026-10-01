@@ -166,7 +166,6 @@ PostgreSQL/Redis 启动密码。日常校验使用 `config --quiet`
 
 位置覆盖只影响 OpenAI 请求中受支持的位置、日期与时区信息，不改变真实出口 IP、epoch 时间戳或系统时区。
 `openai.residency` 是独立的部署约束。身份与位置字段见 [运行设置 API](../docs/api.md#8-运行设置)。
-`openai.guardian_reserved_concurrency` 为 Codex 自动审批保留账号并发，修改后重启生效，语义见同一章节。
 后台账号操作使用 Provider 自己的官方画像；发布资料刷新不改写用户选择或 `config.yaml`
 
 ### 插件命令行

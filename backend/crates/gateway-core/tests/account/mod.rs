@@ -1103,6 +1103,10 @@ fn reserved_concurrency_only_blocks_requests_that_cannot_use_the_reserved_slots(
     normal.reserved_concurrency = 1;
     assert_eq!(normal.concurrency_limit(&candidates[0].account).get(), 4);
     assert!(AccountSelector.select(&candidates, &normal).is_none());
+    let capacity = AccountSelector
+        .capacity_snapshot(&candidates, &normal)
+        .unwrap();
+    assert_eq!((capacity.used_slots(), capacity.total_slots()), (4, 4));
     // 预留造成的暂满仍是可等待的容量约束，不能被当成不可用账号。
     assert_eq!(
         AccountSelector.wait_candidates(&candidates, &normal).len(),
@@ -1110,6 +1114,10 @@ fn reserved_concurrency_only_blocks_requests_that_cannot_use_the_reserved_slots(
     );
 
     let prioritized = context(RotationStrategy::Smart);
+    let capacity = AccountSelector
+        .capacity_snapshot(&candidates, &prioritized)
+        .unwrap();
+    assert_eq!((capacity.used_slots(), capacity.total_slots()), (4, 5));
     let selected = AccountSelector
         .select(&candidates, &prioritized)
         .expect("reserved slot available");

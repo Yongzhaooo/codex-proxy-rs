@@ -54,6 +54,7 @@ pub struct AccountSelectionPolicy {
     max_concurrent_per_account: AccountConcurrency,
     request_interval: Duration,
     queue_policy: ConcurrencyQueuePolicy,
+    openai_guardian_reserved_concurrency: u32,
 }
 
 impl AccountSelectionPolicy {
@@ -68,11 +69,24 @@ impl AccountSelectionPolicy {
             smart_scheduling: SmartSchedulingConfig::default(),
             max_concurrent_per_account: max_concurrent_per_account.into(),
             request_interval,
+            openai_guardian_reserved_concurrency: 0,
             queue_policy: ConcurrencyQueuePolicy {
                 max_waiting: 0,
                 timeout: Duration::ZERO,
             },
         }
+    }
+
+    /// 只传递冻结的运行设置，Guardian 分类与预留策略由 OpenAI Provider 解释。
+    #[must_use]
+    pub const fn with_openai_guardian_reserved_concurrency(mut self, reserved: u32) -> Self {
+        self.openai_guardian_reserved_concurrency = reserved;
+        self
+    }
+
+    #[must_use]
+    pub const fn openai_guardian_reserved_concurrency(self) -> u32 {
+        self.openai_guardian_reserved_concurrency
     }
 
     #[must_use]
@@ -580,13 +594,8 @@ impl AccountSelector {
                 )
             })
             .try_fold((0_u64, 0_u64), |(used, total), candidate| {
-                let capacity = u64::from(
-                    candidate
-                        .account
-                        .effective_concurrency(context.policy.max_concurrent_per_account())
-                        .limit()?
-                        .get(),
-                );
+                let capacity =
+                    u64::from(context.concurrency_limit(&candidate.account).limit()?.get());
                 Some((
                     used.saturating_add(u64::from(candidate.signals.in_flight)),
                     total.saturating_add(capacity),

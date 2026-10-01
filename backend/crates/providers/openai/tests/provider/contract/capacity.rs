@@ -131,7 +131,7 @@ async fn queued_session_sends_only_after_capacity_recovers_while_a_new_child_can
     server.verify().await;
 }
 
-fn unqueued_context(request_id: &str) -> AttemptContext {
+fn unqueued_context(request_id: &str, reserved: u32) -> AttemptContext {
     AttemptContext::new(
         RequestAttemptContext::new(
             ModelRequestId::new(request_id).unwrap(),
@@ -139,7 +139,7 @@ fn unqueued_context(request_id: &str) -> AttemptContext {
         ),
         NonZeroU32::new(1).unwrap(),
         SystemTime::now() + Duration::from_secs(5),
-        account_policy(),
+        account_policy().with_openai_guardian_reserved_concurrency(reserved),
         AccountAttemptContext::new(BTreeSet::new(), None, None)
             .with_account_scope(contract_account_scope()),
         None,
@@ -179,17 +179,22 @@ async fn guardian_requests_can_use_the_reserved_slot_that_normal_requests_cannot
                 .insert_header("content-type", "text/event-stream")
                 .set_body_string(CAPTURE_COMPLETED_SSE),
         )
-        .expect(2)
+        .expect(3)
         .mount(&server)
         .await;
     // 默认账号上限为 2、预留 1：普通请求只能使用 1 个名额，Guardian 可以用满 2 个。
-    let provider = provider_with_guardian_reserve(&store, server.uri(), leases.clone(), 1);
+    let provider = provider_with_affinity_and_base_url_and_leases(
+        &store,
+        Arc::new(MemorySessionAffinity::default()),
+        server.uri(),
+        leases.clone(),
+    );
 
     let mut normal = provider
         .clone()
         .execute(
             planned_request("openai", subagent_operation(Some("collab_spawn"))),
-            unqueued_context("req_guardian_normal_idle"),
+            unqueued_context("req_guardian_normal_idle", 1),
         )
         .await
         .unwrap();
@@ -225,7 +230,7 @@ async fn guardian_requests_can_use_the_reserved_slot_that_normal_requests_cannot
             .clone()
             .execute(
                 planned_request("openai", subagent_operation(None)),
-                unqueued_context("req_guardian_normal_busy"),
+                unqueued_context("req_guardian_normal_busy", 1),
             )
             .await
             .is_err()
@@ -233,9 +238,10 @@ async fn guardian_requests_can_use_the_reserved_slot_that_normal_requests_cannot
     assert_eq!(limits(&leases), [1]);
 
     let mut guardian = provider
+        .clone()
         .execute(
             planned_request("openai", subagent_operation(Some("guardian"))),
-            unqueued_context("req_guardian_reserved"),
+            unqueued_context("req_guardian_reserved", 1),
         )
         .await
         .unwrap();
@@ -244,5 +250,19 @@ async fn guardian_requests_can_use_the_reserved_slot_that_normal_requests_cannot
         event.unwrap();
     }
     assert_eq!(limits(&leases), [1, 2]);
+    drop(guardian);
+
+    // 同一个 Provider 的新请求读取关闭后的策略，不需要重新初始化选择器。
+    let mut unreserved = provider
+        .execute(
+            planned_request("openai", subagent_operation(None)),
+            unqueued_context("req_guardian_reservation_disabled", 0),
+        )
+        .await
+        .unwrap();
+    while let Some(event) = unreserved.next().await {
+        event.unwrap();
+    }
+    assert_eq!(limits(&leases), [1, 2, 2]);
     server.verify().await;
 }

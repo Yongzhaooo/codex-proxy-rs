@@ -116,14 +116,3 @@ fn openai_stream_retry_budget_uses_the_official_hard_cap() {
 fn valid_config() -> OpenAiConfig {
     OpenAiConfig::default()
 }
-
-#[test]
-fn openai_config_reads_guardian_reserved_concurrency_and_defaults_to_no_reservation() {
-    assert_eq!(OpenAiConfig::default().guardian_reserved_concurrency, 0);
-    let config: OpenAiConfig =
-        serde_json::from_str(r#"{"guardian_reserved_concurrency":1}"#).unwrap();
-    assert_eq!(config.guardian_reserved_concurrency, 1);
-    assert!(
-        serde_json::from_str::<OpenAiConfig>(r#"{"guardian_reserved_concurrency":-1}"#).is_err()
-    );
-}

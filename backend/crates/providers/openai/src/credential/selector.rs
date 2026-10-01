@@ -127,7 +127,6 @@ pub struct CodexCredentialSelector {
     cookie_policy: CodexCookiePolicy,
     risk_recovery: Mutex<HashMap<String, RiskRecoveryState>>,
     account_feedback: Arc<AccountFeedbackStats>,
-    guardian_reserved_concurrency: u32,
 }
 
 enum SessionAffinityLookup {
@@ -289,15 +288,7 @@ impl CodexCredentialSelector {
             risk_recovery: Mutex::new(HashMap::new()),
             waiting: ConcurrencyWaitQueue::default(),
             account_feedback,
-            guardian_reserved_concurrency: 0,
         }
-    }
-
-    /// 为 Guardian 自动审批保留每账号并发名额；0 保持全部请求同等调度。
-    #[must_use]
-    pub const fn with_guardian_reserved_concurrency(mut self, reserved: u32) -> Self {
-        self.guardian_reserved_concurrency = reserved;
-        self
     }
 
     pub async fn select(
@@ -403,12 +394,12 @@ impl CodexCredentialSelector {
     ) -> Result<CodexCredentialLease, CredentialSelectionError> {
         let queue_policy = request.attempt.account_selection_policy().queue_policy();
         // 预留名额只对普通请求生效；Guardian 可用满全部名额，并在账号队列中排在普通请求之前。
-        let prioritized = request.guardian && self.guardian_reserved_concurrency > 0;
-        let reserved_concurrency = if prioritized {
-            0
-        } else {
-            self.guardian_reserved_concurrency
-        };
+        let reserve = request
+            .attempt
+            .account_selection_policy()
+            .openai_guardian_reserved_concurrency();
+        let prioritized = request.guardian && reserve > 0;
+        let reserved_concurrency = if prioritized { 0 } else { reserve };
         let mut waiting = CapacityWait::new(
             &self.waiting,
             queue_policy,
@@ -752,6 +743,11 @@ impl CodexCredentialSelector {
                     }
                     Err(error) => return Err(error.into()),
                 };
+                // 凭据重读和插件选号都可能挂起，取得租约前再次让位于新队首。
+                if !waiting.can_try(account.id()) {
+                    excluded.insert(account.id().clone());
+                    continue;
+                }
                 let allows_account_state_mutation = !diagnostic || account.enabled();
                 match self
                     .leases

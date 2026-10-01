@@ -286,8 +286,12 @@ async fn guardian_reservation_survives_upstream_adapters_and_metadata_precedence
             },
         );
         let server = MockServer::start().await;
-        let provider =
-            provider_with_guardian_reserve(&store, server.uri(), leases.clone(), reserved);
+        let provider = provider_with_affinity_and_base_url_and_leases(
+            &store,
+            Arc::new(MemorySessionAffinity::default()),
+            server.uri(),
+            leases.clone(),
+        );
         let (selected, receiver) = oneshot::channel();
         let plan = gateway_core::engine::upstream_adapter::FrozenUpstreamAdapterPlan::new(
             Arc::new(ConnectionProbe {
@@ -306,7 +310,7 @@ async fn guardian_reservation_survives_upstream_adapters_and_metadata_precedence
             .with_upstream_adapters(Some(plan)),
             NonZeroU32::MIN,
             SystemTime::now() + Duration::from_secs(5),
-            account_policy(),
+            account_policy().with_openai_guardian_reserved_concurrency(reserved),
             AccountAttemptContext::new(BTreeSet::new(), None, None)
                 .with_account_scope(contract_account_scope()),
             None,

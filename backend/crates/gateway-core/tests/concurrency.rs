@@ -274,6 +274,38 @@ fn high_priority_waiters_go_ahead_of_normal_waiters_and_keep_fifo_among_themselv
 }
 
 #[test]
+fn displaced_normal_head_yields_its_lease_attempt_until_high_priority_waiters_leave() {
+    block_on(async {
+        let queue = ConcurrencyWaitQueue::default();
+        let policy = ConcurrencyQueuePolicy {
+            max_waiting: 2,
+            timeout: Duration::from_secs(2),
+        };
+        let deadline = SystemTime::now() + Duration::from_secs(2);
+        let normal_budget = ConcurrencyWaitBudget::default();
+        let high_budget = ConcurrencyWaitBudget::default();
+        let mut normal = CapacityWait::new(&queue, policy, deadline, &normal_budget);
+        normal.wait(&["account"]).await.unwrap();
+        assert!(normal.can_try(&"account"));
+
+        // 普通队首已经开始重读容量，尚未取得租约时被高优先级请求插队。
+        let mut high = CapacityWait::new(&queue, policy, deadline, &high_budget)
+            .with_priority(WaitPriority::High);
+        high.wait(&["account"]).await.unwrap();
+        assert!(!normal.can_try(&"account"));
+        assert!(high.can_try(&"account"));
+        assert!(normal.wait(&["account"]).now_or_never().is_none());
+
+        // 审批取消也必须恢复原队首的资格，不能丢失其等待位置。
+        drop(high);
+        normal.wait(&["account"]).await.unwrap();
+        assert!(normal.can_try(&"account"));
+        drop(normal);
+        assert!(!queue.has_waiters(&"account"));
+    });
+}
+
+#[test]
 fn high_priority_waiters_still_require_queueing_to_be_enabled() {
     block_on(async {
         let queue = ConcurrencyWaitQueue::<&str>::default();

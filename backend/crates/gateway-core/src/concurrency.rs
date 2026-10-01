@@ -194,19 +194,20 @@ impl<K: Eq + Hash> WaitTicket<K> {
         &self.key
     }
 
+    fn is_head(&self) -> bool {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .queues
+            .get(&self.key)
+            .and_then(VecDeque::front)
+            .is_some_and(|head| Arc::ptr_eq(&head.waker, &self.waker))
+    }
+
     pub async fn turn(&self) -> Result<(), QueueRejection> {
         let ready = poll_fn(|cx| {
             self.waker.register(cx.waker());
-            let state = self
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if state
-                .queues
-                .get(&self.key)
-                .and_then(VecDeque::front)
-                .is_some_and(|head| Arc::ptr_eq(&head.waker, &self.waker))
-            {
+            if self.is_head() {
                 Poll::Ready(())
             } else {
                 Poll::Pending
@@ -299,10 +300,12 @@ impl<'a, K: Clone + Eq + Hash> CapacityWait<'a, K> {
 
     #[must_use]
     pub fn can_try(&self, key: &K) -> bool {
-        self.ticket
-            .as_ref()
-            .is_some_and(|ticket| ticket.key() == key)
-            || !self.queue.has_waiters_ahead_of(key, self.priority)
+        if let Some(ticket) = self.ticket.as_ref().filter(|ticket| ticket.key() == key) {
+            // 重读容量期间可能被高优先级请求插队，持有 ticket 不代表仍有选号资格。
+            ticket.is_head()
+        } else {
+            !self.queue.has_waiters_ahead_of(key, self.priority)
+        }
     }
 
     #[must_use]

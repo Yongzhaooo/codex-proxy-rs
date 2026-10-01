@@ -9,11 +9,10 @@ import AccountAutoFreezeCard from './components/AccountAutoFreezeCard.vue'
 import AccountWarmupCard from './components/AccountWarmupCard.vue'
 import SettingsBackupSection from './components/backup/SettingsBackupSection.vue'
 import ClientProfileCard from './components/ClientProfileCard.vue'
+import ConcurrencyPolicyCard from './components/ConcurrencyPolicyCard.vue'
 import ModelAliasesCard from './components/ModelAliasesCard.vue'
 import RequestLocationCard from './components/RequestLocationCard.vue'
-import RequestQueueCard from './components/RequestQueueCard.vue'
 import RotationStrategyCard from './components/RotationStrategyCard.vue'
-import RuntimeSettingsCard from './components/RuntimeSettingsCard.vue'
 import SettingsAccessSection from './components/SettingsAccessSection.vue'
 import TokenRefreshCard from './components/TokenRefreshCard.vue'
 import { useSettingsForm } from './composables/useSettingsForm'
@@ -61,6 +60,7 @@ const {
   refreshMarginSecondsValue,
   refreshConcurrencyValue,
   maxConcurrentPerAccountValue,
+  openaiGuardianReservedConcurrencyValue,
   requestIntervalMsValue,
   maxWaitingPerKeyValue,
   maxWaitingPerAccountValue,
@@ -144,9 +144,13 @@ watch(section, (value) => {
 
       <fieldset v-show="section !== 'access'" :disabled="disabled" class="m-0 grid min-w-0 gap-5 border-0 p-0" aria-label="基础设置">
         <template v-if="section === 'runtime'">
-          <RuntimeSettingsCard
+          <ConcurrencyPolicyCard
             v-model:max-concurrent-per-account="maxConcurrentPerAccountValue"
             v-model:request-interval-ms="requestIntervalMsValue"
+            v-model:max-waiting-per-key="maxWaitingPerKeyValue"
+            v-model:max-waiting-per-account="maxWaitingPerAccountValue"
+            v-model:concurrency-wait-timeout-seconds="concurrencyWaitTimeoutSecondsValue"
+            v-model:openai-guardian-reserved-concurrency="openaiGuardianReservedConcurrencyValue"
           />
           <RotationStrategyCard
             v-model="form.rotationStrategy"
@@ -154,11 +158,6 @@ watch(section, (value) => {
             :smart-defaults="smartSchedulingDefaults"
             :disabled="disabled"
             :options="rotationOptions"
-          />
-          <RequestQueueCard
-            v-model:max-waiting-per-key="maxWaitingPerKeyValue"
-            v-model:max-waiting-per-account="maxWaitingPerAccountValue"
-            v-model:concurrency-wait-timeout-seconds="concurrencyWaitTimeoutSecondsValue"
           />
           <AccountAutoFreezeCard
             v-model:enabled="form.accountAutoFreezeEnabled"
